@@ -1,0 +1,13 @@
+{
+  "case": "worker-start-codex-launch",
+  "trigger": "orca orchestration worker-start --worktree new-top-level --agent codex (no --model) run by the coordinator",
+  "hook": "agent.launch.before",
+  "event": {
+    "agent": "codex",
+    "workspaceId": "00000000-0000-4000-8000-000000000015::/Users/example/orca/workspaces/demo/spike-codex",
+    "workspaceKind": "worktree",
+    "terminalId": "term_00000000-0000-4000-8000-000000000103",
+    "command": "codex '-c' 'check_for_update_on_startup=false' '-c' 'disable_paste_burst=true' '--approve-for-me'",
+    "env": {}
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "case": "plugin-agent-launch-claude",
+  "trigger": "agent.launch from a plugin worker (host.call agent.launch, agent claude, prompt given but not delivered: agent_launch_terminal_not_running_agent)",
+  "hook": "agent.launch.before",
+  "event": {
+    "agent": "claude",
+    "workspaceId": "00000000-0000-4000-8000-000000000015::/Users/example/projects/unifier-sandbox/demo",
+    "workspaceKind": "worktree",
+    "terminalId": "term_00000000-0000-4000-8000-000000000105",
+    "command": "claude '--dangerously-skip-permissions'",
+    "env": {}
+  }
+}

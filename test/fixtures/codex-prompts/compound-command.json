@@ -1,0 +1,7 @@
+{
+  "command": "git add inside.txt && git commit -m 'chore: add inside' && echo $(git rev-parse --short HEAD) > last-commit.txt",
+  "kind": "command",
+  "approveKeys": "y",
+  "declineKeys": "\u001b",
+  "notes": "The $ line wraps onto a second screen line; join wrapped lines with a single space before parsing. Contains && chains, $(...) and a redirect. Declined with esc."
+}

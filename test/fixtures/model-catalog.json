@@ -1,0 +1,240 @@
+{
+  "source": "agent-model-catalog.db rows (seq 1, 8, 10), efforts and descriptions dropped",
+  "entries": [
+    {
+      "agent": "claude",
+      "discovered": {
+        "models": [
+          {
+            "id": "opus",
+            "label": "Opus 5.5",
+            "resolvedModel": "claude-opus-5-5",
+            "isDefault": true
+          },
+          {
+            "id": "fable",
+            "label": "Fable 5.1",
+            "resolvedModel": "claude-fable-5-1",
+            "isDefault": false
+          },
+          {
+            "id": "sonnet",
+            "label": "Sonnet 5.5",
+            "resolvedModel": "claude-sonnet-5-5",
+            "isDefault": false
+          },
+          {
+            "id": "haiku",
+            "label": "Haiku 5.5",
+            "resolvedModel": "claude-haiku-5-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "label": "Haiku 4.5",
+            "resolvedModel": "claude-haiku-4-5-20251001",
+            "isDefault": false
+          },
+          {
+            "id": "claude-sonnet-5",
+            "label": "Sonnet 5",
+            "resolvedModel": "claude-sonnet-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-5",
+            "label": "Opus 5",
+            "resolvedModel": "claude-opus-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-fable-5",
+            "label": "Fable 5",
+            "resolvedModel": "claude-fable-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-4-8",
+            "label": "Opus 4.8",
+            "resolvedModel": "claude-opus-4-8",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-4-7",
+            "label": "Opus 4.7",
+            "resolvedModel": "claude-opus-4-7",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-4-6",
+            "label": "Opus 4.6",
+            "resolvedModel": "claude-opus-4-6",
+            "isDefault": false
+          },
+          {
+            "id": "claude-sonnet-4-6",
+            "label": "Sonnet 4.6",
+            "resolvedModel": "claude-sonnet-4-6",
+            "isDefault": false
+          }
+        ]
+      }
+    },
+    {
+      "agent": "codex",
+      "discovered": {
+        "models": [
+          {
+            "id": "gpt-6.1-sol",
+            "label": "GPT-6.1-Sol",
+            "isDefault": false
+          },
+          {
+            "id": "gpt-6.1-terra",
+            "label": "GPT-6.1 Terra",
+            "isDefault": false
+          },
+          {
+            "id": "gpt-6-astra",
+            "label": "GPT-6-Astra",
+            "isDefault": false
+          },
+          {
+            "id": "gpt-6-sol",
+            "label": "GPT-6-Sol",
+            "isDefault": true
+          },
+          {
+            "id": "gpt-6-luna",
+            "label": "GPT-6-Luna",
+            "isDefault": false
+          },
+          {
+            "id": "gpt-5.6-sol",
+            "label": "GPT-5.6-Sol",
+            "isDefault": false
+          },
+          {
+            "id": "gpt-5.6-terra",
+            "label": "GPT-5.6-Terra",
+            "isDefault": false
+          },
+          {
+            "id": "gpt-5.6-luna",
+            "label": "GPT-5.6-Luna",
+            "isDefault": false
+          }
+        ]
+      }
+    },
+    {
+      "agent": "claude",
+      "discovered": {
+        "models": [
+          {
+            "id": "claude-opus-5-5",
+            "label": "Claude Opus 5.5",
+            "resolvedModel": "claude-opus-5-5",
+            "isDefault": true
+          },
+          {
+            "id": "claude-fable-5-2",
+            "label": "Claude Fable 5.2",
+            "resolvedModel": "claude-fable-5-2",
+            "isDefault": false
+          },
+          {
+            "id": "claude-sonnet-5-5",
+            "label": "Claude Sonnet 5.5",
+            "resolvedModel": "claude-sonnet-5-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-haiku-5-5",
+            "label": "Claude Haiku 5.5",
+            "resolvedModel": "claude-haiku-5-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-fable-5-1",
+            "label": "Fable 5.1",
+            "resolvedModel": "claude-fable-5-1",
+            "isDefault": false
+          },
+          {
+            "id": "claude-haiku-4-5-20251001",
+            "label": "Haiku 4.5",
+            "resolvedModel": "claude-haiku-4-5-20251001",
+            "isDefault": false
+          },
+          {
+            "id": "claude-sonnet-5",
+            "label": "Sonnet 5",
+            "resolvedModel": "claude-sonnet-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-5",
+            "label": "Opus 5",
+            "resolvedModel": "claude-opus-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-fable-5",
+            "label": "Fable 5",
+            "resolvedModel": "claude-fable-5",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-4-8",
+            "label": "Opus 4.8",
+            "resolvedModel": "claude-opus-4-8",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-4-7",
+            "label": "Opus 4.7",
+            "resolvedModel": "claude-opus-4-7",
+            "isDefault": false
+          },
+          {
+            "id": "claude-opus-4-6",
+            "label": "Opus 4.6",
+            "resolvedModel": "claude-opus-4-6",
+            "isDefault": false
+          },
+          {
+            "id": "claude-sonnet-4-6",
+            "label": "Sonnet 4.6",
+            "resolvedModel": "claude-sonnet-4-6",
+            "isDefault": false
+          },
+          {
+            "id": "opus",
+            "label": "Opus 5.5 alias",
+            "resolvedModel": "claude-opus-5-5",
+            "isDefault": false
+          },
+          {
+            "id": "fable",
+            "label": "Fable 5.2 alias",
+            "resolvedModel": "claude-fable-5-2",
+            "isDefault": false
+          },
+          {
+            "id": "sonnet",
+            "label": "Sonnet 5.5 alias",
+            "resolvedModel": "claude-sonnet-5-5",
+            "isDefault": false
+          },
+          {
+            "id": "haiku",
+            "label": "Haiku 5.5 alias",
+            "resolvedModel": "claude-haiku-5-5",
+            "isDefault": false
+          }
+        ]
+      }
+    }
+  ]
+}

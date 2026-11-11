@@ -1,0 +1,208 @@
+{
+  "manifestVersion": 2,
+  "id": "unifier",
+  "name": "Unifier",
+  "version": "0.1.0",
+  "description": "Project-level board and orchestration across repos and worktrees.",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "settings": [
+      {
+        "key": "projectsRoot",
+        "title": "Projects folder",
+        "description": "Folder whose subfolders are Projects.",
+        "type": "string",
+        "default": "~/projects"
+      },
+      {
+        "key": "excludedProjects",
+        "title": "Excluded Projects",
+        "description": "Projects Unifier never touches (setup, cleanup, hubs, orchestrators, approvals). Case-insensitive.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "protectedPaths",
+        "title": "Protected paths",
+        "description": "Comma-separated extra path names the approver treats like .env. Case-insensitive.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "orchestratorAgent",
+        "title": "Orchestrator agent",
+        "description": "Agent that runs the Orchestrator.",
+        "type": "string",
+        "default": "claude"
+      },
+      {
+        "key": "orchestratorModel",
+        "title": "Orchestrator model",
+        "description": "Model used by the Orchestrator.",
+        "type": "string",
+        "default": "claude-opus-5-5"
+      },
+      {
+        "key": "workerImplementation",
+        "title": "Worker default for implementation",
+        "description": "Agent and model for implementation, as agent:model.",
+        "type": "string",
+        "default": "codex:gpt-6.1-sol"
+      },
+      {
+        "key": "workerReview",
+        "title": "Worker default for review",
+        "description": "Agent and model for review, as agent:model.",
+        "type": "string",
+        "default": "codex:gpt-6.1-sol"
+      },
+      {
+        "key": "workerDesign",
+        "title": "Worker default for design and planning",
+        "description": "Agent and model for design and planning, as agent:model.",
+        "type": "string",
+        "default": "claude:claude-opus-4-8"
+      },
+      {
+        "key": "workerProse",
+        "title": "Worker default for prose",
+        "description": "Agent and model for prose, as agent:model.",
+        "type": "string",
+        "default": "claude:claude-opus-4-8"
+      },
+      {
+        "key": "hideMainCheckouts",
+        "title": "Hide main checkouts",
+        "description": "Hide each Repo's main checkout from the board.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "cleanupEnabled",
+        "title": "Clean up finished Worktrees",
+        "description": "Remove Worktrees that are safely finished.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "cleanupIntervalMinutes",
+        "title": "Cleanup interval (minutes)",
+        "description": "How often cleanup runs.",
+        "type": "integer",
+        "default": 10,
+        "minimum": 5
+      },
+      {
+        "key": "approverEnabled",
+        "title": "Approve safe Decisions",
+        "description": "Let Unifier approve safe commands for Workers.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "setupEnabled",
+        "title": "Set up new Worktrees",
+        "description": "Run setup when a Worktree is created.",
+        "type": "boolean",
+        "default": true
+      }
+    ],
+    "commands": [
+      {
+        "id": "unifier.checkAgents",
+        "title": "Unifier: Check agent setup"
+      },
+      {
+        "id": "unifier.openHub",
+        "title": "Unifier: Open hub"
+      },
+      {
+        "id": "unifier.openBoard",
+        "title": "Unifier: Open board"
+      },
+      {
+        "id": "unifier.cleanupDryRun",
+        "title": "Unifier: Show merged worktrees"
+      },
+      {
+        "id": "unifier.cleanupNow",
+        "title": "Unifier: Remove merged worktrees now"
+      },
+      {
+        "id": "unifier.hideExternal",
+        "title": "Unifier: Hide outside worktrees"
+      }
+    ],
+    "events": [
+      {
+        "on": "agent.status.changed"
+      },
+      {
+        "on": "workspace.changed"
+      },
+      {
+        "on": "workspace.created"
+      },
+      {
+        "on": "workspace.removed"
+      }
+    ],
+    "hooks": [
+      {
+        "event": "agent.launch.before",
+        "onError": "pass"
+      },
+      {
+        "event": "agent.prompt.before",
+        "onError": "pass"
+      },
+      {
+        "event": "workspace.create.after",
+        "onError": "pass"
+      }
+    ],
+    "customEditors": [
+      {
+        "id": "unifier-board",
+        "title": "Board",
+        "extensions": [".unifier-board"],
+        "entry": "editor/board.ts",
+        "frame": "isolated"
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "workspace:read"
+    },
+    {
+      "kind": "workspace:write"
+    },
+    {
+      "kind": "agent:read"
+    },
+    {
+      "kind": "agent:launch"
+    },
+    {
+      "kind": "terminal:send"
+    },
+    {
+      "kind": "terminal:read"
+    },
+    {
+      "kind": "notifications:show"
+    },
+    {
+      "kind": "storage:own"
+    },
+    {
+      "kind": "settings:own"
+    }
+  ]
+}

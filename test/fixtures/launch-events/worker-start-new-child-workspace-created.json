@@ -1,0 +1,11 @@
+{
+  "case": "worker-start-new-child-workspace-created",
+  "trigger": "workspace.create.after for the new-child worktree",
+  "hook": "workspace.create.after",
+  "event": {
+    "workspaceId": "00000000-0000-4000-8000-000000000015::/Users/example/orca/workspaces/demo/spike-child",
+    "kind": "worktree",
+    "path": "/Users/example/orca/workspaces/demo/spike-child",
+    "branch": "spike-child"
+  }
+}

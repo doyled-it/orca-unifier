@@ -1,0 +1,13 @@
+{
+  "case": "worker-start-current-launch",
+  "trigger": "worker-start --worktree current from a folder-workspace coordinator: workspaceId is the coordinator workspace",
+  "hook": "agent.launch.before",
+  "event": {
+    "agent": "claude",
+    "workspaceId": "00000000-0000-4000-8000-000000000019::/Users/example/projects/unifier-sandbox",
+    "workspaceKind": "worktree",
+    "terminalId": "term_00000000-0000-4000-8000-000000000108",
+    "command": "claude '--dangerously-skip-permissions' '--model' 'claude-haiku-5-5'",
+    "env": {}
+  }
+}

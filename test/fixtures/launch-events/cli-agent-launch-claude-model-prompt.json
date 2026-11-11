@@ -1,0 +1,13 @@
+{
+  "case": "cli-agent-launch-claude-model-prompt",
+  "trigger": "orca agent launch --agent claude --model claude-haiku-5-5 --prompt ... (stand-in for a manual Claude tab; GUI tab not captured)",
+  "hook": "agent.launch.before",
+  "event": {
+    "agent": "claude",
+    "workspaceId": "00000000-0000-4000-8000-000000000015::/Users/example/projects/unifier-sandbox/demo",
+    "workspaceKind": "worktree",
+    "terminalId": "term_00000000-0000-4000-8000-000000000102",
+    "command": "claude '--dangerously-skip-permissions' '--model' 'claude-haiku-5-5' 'Reply with the single word ok. Do not run any tools.'",
+    "env": {}
+  }
+}

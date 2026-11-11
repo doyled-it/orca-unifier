@@ -1,0 +1,11 @@
+{
+  "case": "terminal-send-prompt-claude",
+  "trigger": "orca terminal send --text ... --enter to a running claude agent",
+  "hook": "agent.prompt.before",
+  "event": {
+    "agent": "claude",
+    "terminalId": "term_00000000-0000-4000-8000-000000000105",
+    "prompt": "Reply with the single word ok. Do not run any tools.",
+    "inputKind": "driving"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "command": "apply_patch edit creating /Users/example/projects/unifier-sandbox/outside.txt (outside the worktree)",
+  "kind": "edit",
+  "approveKeys": "y",
+  "declineKeys": "\u001b",
+  "notes": "Header Would you like to make the following edits? with Destination line. Decline (esc) verified: Codex prints Conversation interrupted and writes nothing. Option a = do not ask again for these files."
+}

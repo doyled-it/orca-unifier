@@ -1,0 +1,11 @@
+{
+  "case": "terminal-send-prompt-coordinator",
+  "trigger": "orca terminal send --enter to the coordinator (driving input)",
+  "hook": "agent.prompt.before",
+  "event": {
+    "agent": null,
+    "terminalId": "term_00000000-0000-4000-8000-000000000104",
+    "prompt": "Run exactly these two shell commands in order, once each, then end your turn. Do not run anything else. 1) orca orchestration worker-start --spec \"Reply with worker_done saying ok. Do not run any other command.\" --worktree new-child --repo id:00000000-0000-4000-8000-000000000015 --name spike-child --agent claude --model claude-haiku-5-5 --json > /Users/example/projects/unifier-sandbox/.unifier/driver/4-worker-child.json 2>&1   2) orca orchestration worker-start --spec \"Reply with worker_done saying ok. Do not run any other command.\" --worktree current --agent claude --model claude-haiku-5-5 --json > /Users/example/projects/unifier-sandbox/.unifier/driver/5-worker-current.json 2>&1",
+    "inputKind": "driving"
+  }
+}

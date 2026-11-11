@@ -1,0 +1,16 @@
+{
+  "name": "unifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "orca plugin test . --json",
+    "typecheck": "tsc -p . && tsc -p editor",
+    "lint": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.6",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

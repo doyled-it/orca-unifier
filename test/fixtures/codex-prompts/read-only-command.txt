@@ -1,0 +1,15 @@
+  >_ OpenAI Codex (v0.163.0)
+     ~/orca/workspaces/demo/spike-codex
+› This is an approval-prompt test. For each command I give you, call your shell tool ONCE with
+  sandbox_permissions set to require_escalated (justification: spike test) on the first attempt; never run
+  it in the sandbox first. First command: uname -a
+• I’ll run uname -a once with the requested escalation setting.
+• Running uname -a
+  Would you like to run the following command?
+  Environment: local
+  Reason: spike test
+  $ uname -a
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `uname -a` (p)
+  3. No, and tell Codex what to do differently (esc)
+  Press enter to confirm or esc to cancel
