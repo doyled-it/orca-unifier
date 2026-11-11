@@ -22,7 +22,7 @@ import {
 import type { UnifierSettings } from '../core/types'
 import type { Schedule } from './board-service'
 import type { Messenger } from './messenger'
-import { createRetirement } from './retirement'
+import { createConsentBackoff } from './retirement'
 import type { Tracker } from './tracker'
 
 type CreatedWorktree = PluginHooks['workspace.create.after']['event']
@@ -81,28 +81,28 @@ export function createSetupService(
   let pending: Promise<void> = Promise.resolve()
   let mutations: Promise<unknown> = Promise.resolve()
   let cancelRetry: (() => void) | null = null
+  const retryNotes = new Set<string>()
   const schedule: Schedule =
     deps.schedule ??
     ((fn, ms) => {
       const timer = setTimeout(fn, ms)
       return () => clearTimeout(timer)
     })
-  const retire = createRetirement(
+  const backoff = createConsentBackoff(
     (message) => orca.log(message),
-    () => {
-      disposed = true
-      cancelRetry?.()
-      cancelRetry = null
-    },
+    schedule,
+    () => queueDrain(),
   )
 
   async function read(): Promise<Job[]> {
-    return jobs(await orca.storage.get(KEY))
+    return jobs(await orca.storage.get(KEY).then(backoff.success))
   }
 
   function update(fn: (current: Job[]) => Job[]): Promise<void> {
     const next = mutations.then(async () => {
-      await orca.storage.set(KEY, fn(await read()) as unknown as JsonValue)
+      await orca.storage
+        .set(KEY, fn(await read()) as unknown as JsonValue)
+        .then(backoff.success)
     })
     mutations = next.catch(() => {})
     return next
@@ -113,7 +113,7 @@ export function createSetupService(
   }
 
   async function readNotes(): Promise<string[]> {
-    const raw = await orca.storage.get(NOTES_KEY)
+    const raw = await orca.storage.get(NOTES_KEY).then(backoff.success)
     return Array.isArray(raw)
       ? raw.filter((id): id is string => typeof id === 'string')
       : []
@@ -125,23 +125,32 @@ export function createSetupService(
       .digest('hex')
     const id = JSON.stringify([path, hash])
     const notified = await readNotes()
-    if (notified.includes(id)) return
+    if (notified.includes(id) && !retryNotes.has(id)) return
     // Claim before messaging: a restart during delivery must not enqueue it again.
     // Retain the claim after delivery, independently of the pending job.
-    await orca.storage.set(NOTES_KEY, [...notified, id].slice(-MAX_NOTES))
+    await orca.storage
+      .set(
+        NOTES_KEY,
+        [...notified.filter((n) => n !== id), id].slice(-MAX_NOTES),
+      )
+      .then(backoff.success)
     try {
       await deps.messenger.toOrchestrator(
         owner,
         'Setup gaps',
         `Setup gaps: ${JSON.stringify(report).slice(1, -1)}`,
       )
+      retryNotes.delete(id)
     } catch (e) {
-      if (retire(e)) throw e
+      retryNotes.add(id)
       // Messenger rejects only when enqueue failed; leave that note retryable.
-      await orca.storage.set(
-        NOTES_KEY,
-        (await readNotes()).filter((n) => n !== id),
-      )
+      await orca.storage
+        .set(
+          NOTES_KEY,
+          (await readNotes()).filter((n) => n !== id),
+        )
+        .then(backoff.success)
+      retryNotes.delete(id)
       throw e
     }
   }
@@ -275,11 +284,13 @@ export function createSetupService(
     )
     if (disposed) return null
     const before = await snapshotUntracked(deps.exec, event.path)
-    const { terminalId } = await orca.host.call('terminal.create', {
-      workspaceId: event.workspaceId,
-      title: 'setup',
-      command: renderSetupCommand(setupCommands(langs, files)),
-    })
+    const { terminalId } = await orca.host
+      .call('terminal.create', {
+        workspaceId: event.workspaceId,
+        title: 'setup',
+        command: renderSetupCommand(setupCommands(langs, files)),
+      })
+      .then(backoff.success)
     return {
       terminalId,
       artifacts: setupArtifacts(langs, files),
@@ -298,7 +309,7 @@ export function createSetupService(
         continue
       }
       try {
-        const settings = await deps.settings()
+        const settings = await deps.settings().then(backoff.success)
         if (disposed) return
         if (!settings.setupEnabled) {
           await remove(job.id)
@@ -326,10 +337,12 @@ export function createSetupService(
         }
         if (job.installation) {
           const installation = job.installation
-          const screen = await orca.host.call('terminal.read', {
-            terminalId: installation.terminalId,
-            maxLines: 200,
-          })
+          const screen = await orca.host
+            .call('terminal.read', {
+              terminalId: installation.terminalId,
+              maxLines: 200,
+            })
+            .then(backoff.success)
           if (disposed) return
           const done = screen.lines.some(
             (line) => line.trim() === 'unifier setup: done',
@@ -379,7 +392,7 @@ export function createSetupService(
         await note(owner, job.path, report)
         if (!disposed) await remove(job.id)
       } catch (e) {
-        if (retire(e)) return
+        if (backoff.handle(e)) return
         orca.log(
           `unifier: setup${job.report ? ' note' : ''} failed: ${String(e)}`,
         )
@@ -390,23 +403,28 @@ export function createSetupService(
   }
 
   function scheduleDrain(ms = 0) {
-    if (disposed) return
+    if (disposed || backoff.pending) return
     if (cancelRetry !== null) {
       if (ms !== 0) return
       cancelRetry()
     }
     cancelRetry = schedule(() => {
       cancelRetry = null
-      pending = pending
-        .then(async () => {
-          if (!disposed) await drain()
-        })
-        .catch((e) => {
-          if (retire(e)) return
-          orca.log(`unifier: setup queue failed: ${String(e)}`)
-          scheduleDrain(RETRY_MS)
-        })
+      queueDrain()
     }, ms)
+  }
+
+  function queueDrain() {
+    if (disposed || backoff.pending) return
+    pending = pending
+      .then(async () => {
+        if (!disposed && !backoff.pending) await drain()
+      })
+      .catch((e) => {
+        if (backoff.handle(e)) return
+        orca.log(`unifier: setup queue failed: ${String(e)}`)
+        scheduleDrain(RETRY_MS)
+      })
   }
 
   const sub = orca.hooks.on('workspace.create.after', async (event) => {
@@ -425,7 +443,7 @@ export function createSetupService(
       ])
       scheduleDrain()
     } catch (e) {
-      if (retire(e)) return
+      if (backoff.handle(e)) return
       orca.log(`unifier: setup queue failed: ${String(e)}`)
     }
   })
@@ -436,6 +454,7 @@ export function createSetupService(
   return {
     dispose() {
       disposed = true
+      backoff.dispose()
       sub.dispose()
       cancelRetry?.()
       cancelRetry = null

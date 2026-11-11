@@ -63,6 +63,7 @@ async function setup(
     common?: string
     owner?: boolean
     fail?: 'settings' | 'list' | 'files' | 'git' | 'write' | 'message'
+    messageError?: Error
     hang?: boolean
     wired?: boolean
     path?: string
@@ -205,7 +206,8 @@ async function setup(
             tracker: createTracker(orca.storage),
             messenger: {
               async toOrchestrator(to, subject, body) {
-                if (opts.fail === 'message') throw new Error('enqueue failed')
+                if (opts.fail === 'message')
+                  throw opts.messageError ?? new Error('enqueue failed')
                 notes.push({ to, subject, body })
                 if (hangingNote) await new Promise(() => {})
               },
@@ -439,6 +441,29 @@ test('setup retries a rejected note enqueue after restart', async () => {
     await s.worker.hooks.fire('workspace.create.after', event)
     await settle()
     assert.equal(s.notes.length, 1)
+  } finally {
+    await s.worker.deactivate()
+  }
+})
+
+test('setup retries a consent-rejected note enqueue after restart during backoff', async () => {
+  const opts: { fail?: 'message'; messageError: Error } = {
+    fail: 'message',
+    messageError: new Error('plugin is not enabled with current consent'),
+  }
+  const s = await setup(opts)
+  try {
+    await s.worker.hooks.fire('workspace.create.after', event)
+    await settle()
+    assert.equal(s.notes.length, 0)
+    delete opts.fail
+    await s.restart()
+    await settle()
+    assert.equal(s.notes.length, 1)
+    await s.restart()
+    await settle()
+    assert.equal(s.notes.length, 1)
+    assert.equal(s.host.callsOf('terminal.create').length, 1)
   } finally {
     await s.worker.deactivate()
   }

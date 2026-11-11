@@ -1388,21 +1388,35 @@ for (const error of [
   hostError('consent_required', 'Consent changed'),
   hostError('not_permitted', 'Permission changed'),
 ]) {
-  test(`approval terminal polling retires without another read: ${error.message}`, async () => {
+  test(`approval terminal polling recovers after two consent errors: ${error.message}`, async () => {
     const s = await setup()
     try {
-      const start = s.worker.logs.length
       let reads = 0
       s.host.respond('terminal.read', () => {
         reads++
-        throw error
+        if (reads <= 2) throw error
+        return { lines: command('uname').split('\n'), truncated: false }
       })
       s.sched.fire()
       await settle()
+      assert.equal(reads, 1)
+      assert.deepEqual(
+        [...s.sched.pending].map((p) => p.ms),
+        [1000],
+      )
+      // Requests arriving during backoff must not bypass the delay.
       await s.service.tick()
       assert.equal(reads, 1)
-      assert.equal(s.sched.pending.size, 0)
-      assert.deepEqual(s.worker.logs.slice(start), ['retired: consent changed'])
+      s.sched.fire()
+      await settle()
+      assert.equal(reads, 2)
+      assert.equal(s.sched.pending.size, 1)
+      s.sched.fire()
+      await settle()
+      assert.deepEqual(s.keys, [
+        [WORKER.terminalId, 'y', false],
+        [WORKER.terminalId, 'y', false],
+      ])
     } finally {
       await s.close()
     }

@@ -298,6 +298,122 @@ test('a flush skips a message another worker is sending right now', async () => 
   await s.worker.deactivate()
 })
 
+test('consent failures saving a delivered message retry storage without sending again', async () => {
+  const s = await setup({ storedRunId: 'run_1' })
+  const pending = new Set<() => void>()
+  let failures = 0
+  const m = createMessenger(
+    {
+      ...s.api,
+      storage: {
+        ...s.api.storage,
+        async set(key, value) {
+          if (
+            key === 'messenger.v1' &&
+            value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            Array.isArray(value.outbox) &&
+            value.outbox.length === 0 &&
+            s.sent.length > 0 &&
+            failures++ < 2
+          )
+            throw hostError('consent_required', 'Consent is being applied')
+          return s.api.storage.set(key, value)
+        },
+      },
+    },
+    {
+      tracker: s.tracker,
+      cli: s.cli,
+      globalHubWorkspaceId: async () => HUB,
+      now: () => 100_000,
+      schedule: (fn) => {
+        pending.add(fn)
+        return () => pending.delete(fn)
+      },
+    },
+  )
+  try {
+    await m.toOrchestrator(ORCH, 'Subject', 'Body')
+    assert.equal(s.sent.length, 1)
+    for (let i = 0; i < 2; i++) {
+      assert.equal(pending.size, 1)
+      const callbacks = [...pending]
+      pending.clear()
+      for (const fn of callbacks) fn()
+      await settle(1)
+      assert.equal(s.sent.length, 1)
+    }
+    assert.deepEqual(
+      ((await s.api.storage.get('messenger.v1')) as { outbox: unknown[] })
+        .outbox,
+      [],
+    )
+  } finally {
+    m.dispose()
+    await s.worker.deactivate()
+  }
+})
+
+test('consent recovery retries a delivery even when its rollback was rejected', async () => {
+  const s = await setup({ storedRunId: 'run_1' })
+  const pending = new Set<() => void>()
+  let rejected = false
+  const error = hostError('consent_required', 'Consent is being applied')
+  s.host.respond('terminal.create', () => {
+    if (!rejected) {
+      rejected = true
+      throw error
+    }
+    return { terminalId: 'sender' }
+  })
+  let rollbackFailed = false
+  const m = createMessenger(
+    {
+      ...s.api,
+      storage: {
+        ...s.api.storage,
+        async set(key, value) {
+          if (key === 'messenger.v1' && rejected && !rollbackFailed) {
+            rollbackFailed = true
+            throw error
+          }
+          return s.api.storage.set(key, value)
+        },
+      },
+    },
+    {
+      tracker: s.tracker,
+      cli: s.cli,
+      globalHubWorkspaceId: async () => HUB,
+      now: () => 100_000,
+      schedule: (fn) => {
+        pending.add(fn)
+        return () => pending.delete(fn)
+      },
+    },
+  )
+  try {
+    await m.toOrchestrator(ORCH, 'Subject', 'Body')
+    assert.equal(s.sent.length, 0)
+    assert.equal(pending.size, 1)
+    const callbacks = [...pending]
+    pending.clear()
+    for (const fn of callbacks) fn()
+    await settle(1)
+    assert.equal(s.sent.length, 1)
+    assert.deepEqual(
+      ((await s.api.storage.get('messenger.v1')) as { outbox: unknown[] })
+        .outbox,
+      [],
+    )
+  } finally {
+    m.dispose()
+    await s.worker.deactivate()
+  }
+})
+
 test('enqueue stores the message without sending it', async () => {
   const s = await setup({ storedRunId: 'run_1' })
   const m = s.make()

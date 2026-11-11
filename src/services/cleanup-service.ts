@@ -15,7 +15,7 @@ import {
 } from '../core/projects'
 import type { UnifierSettings, WorktreeRecord } from '../core/types'
 import type { BoardService, Schedule } from './board-service'
-import { createRetirement, isConsentError } from './retirement'
+import { createConsentBackoff, isConsentError } from './retirement'
 
 const ARMED = 'cleanup.armed.v1'
 const LAST_AUTO_AT = 'cleanup.lastAutoAt.v1'
@@ -54,13 +54,15 @@ export function createCleanupService(
   let cancelTimer: (() => void) | null = null
   let timerVersion = 0
   let initialContext = true
-  const retire = createRetirement(
+  let retryAutomatic = false
+  const backoff = createConsentBackoff(
     (message) => orca.log(message),
+    schedule,
     () => {
-      disposed = true
-      ++timerVersion
-      cancelTimer?.()
-      cancelTimer = null
+      if (retryAutomatic) {
+        retryAutomatic = false
+        void automatic(true).finally(() => configureTimer())
+      } else void configureTimer()
     },
   )
 
@@ -177,7 +179,7 @@ export function createCleanupService(
         if (!w) {
           reason = 'The Worktree identity changed or could not be confirmed.'
         } else {
-          const settings = await deps.settings()
+          const settings = await deps.settings().then(backoff.success)
           reason =
             automatic && !settings.cleanupEnabled
               ? 'Automatic cleanup is disabled.'
@@ -205,7 +207,11 @@ export function createCleanupService(
               mode === 'live' ? await deps.cli.listWorktrees() : worktrees
             const current = confirmedWorktree(w, latest)
             reason = current
-              ? await protectedReason(current, latest, await deps.settings())
+              ? await protectedReason(
+                  current,
+                  latest,
+                  await deps.settings().then(backoff.success),
+                )
               : 'The Worktree identity changed or could not be confirmed.'
             if (!current || reason) {
               result.kept.push({
@@ -226,7 +232,10 @@ export function createCleanupService(
               liveAgent: currentLiveAgent,
             })
             // The person can disable cleanup while any of the checks await I/O.
-            if (automatic && !(await deps.settings()).cleanupEnabled)
+            if (
+              automatic &&
+              !(await deps.settings().then(backoff.success)).cleanupEnabled
+            )
               reason = 'Automatic cleanup is disabled.'
             else if (!verdict.remove) reason = verdict.reason
             else if (!disposed) {
@@ -245,7 +254,7 @@ export function createCleanupService(
           }
         }
       } catch (error) {
-        if (retire(error)) return result
+        if (isConsentError(error)) throw error
         reason =
           'Safety checks or removal failed. Keep this Worktree and check the plugin logs.'
         orca.log(`unifier: cleanup kept ${original.id}: ${String(error)}`)
@@ -258,9 +267,11 @@ export function createCleanupService(
     if (mode === 'live' && result.removed.length > 0) {
       const title = `Removed ${result.removed.length} merged worktrees: ${result.removed.map((id) => names.get(id)).join(', ')}`
       try {
-        await orca.host.call('notifications.show', { title })
+        await orca.host
+          .call('notifications.show', { title })
+          .then(backoff.success)
       } catch (error) {
-        if (retire(error)) return result
+        if (isConsentError(error)) throw error
         orca.log(`unifier: cleanup notification failed: ${String(error)}`)
       }
     }
@@ -281,29 +292,39 @@ export function createCleanupService(
   }
 
   // Include settings and storage reads in deduplication, for either pass mode.
-  function automatic(): Promise<void> {
-    if (disposed) return Promise.resolve()
+  function automatic(consentRetry = false): Promise<void> {
+    if (disposed || backoff.pending) return Promise.resolve()
     if (autoPending) return autoPending
     autoPending = (async () => {
-      const settings = await deps.settings()
+      const settings = await deps.settings().then(backoff.success)
       if (disposed || !settings.cleanupEnabled) return
-      const lastAutoAt = await orca.storage.get(LAST_AUTO_AT)
+      const lastAutoAt = await orca.storage
+        .get(LAST_AUTO_AT)
+        .then(backoff.success)
       if (
+        !consentRetry &&
         typeof lastAutoAt === 'number' &&
         Number.isFinite(lastAutoAt) &&
         now() - lastAutoAt < settings.cleanupIntervalMinutes * 60_000
       )
         return
-      const armed = (await orca.storage.get(ARMED)) === true
+      const armed =
+        (await orca.storage.get(ARMED).then(backoff.success)) === true
       if (disposed) return
       // Claim before any expensive work, so worker restarts honor the interval.
-      await orca.storage.set(LAST_AUTO_AT, now())
+      await orca.storage.set(LAST_AUTO_AT, now()).then(backoff.success)
       if (!armed)
         orca.log('unifier: cleanup is not armed; automatic cleanup is dry only')
       await run(armed ? 'live' : 'dry', true)
     })()
       .catch((error) => {
-        if (retire(error)) return
+        if (isConsentError(error)) {
+          retryAutomatic = true
+          cancelTimer?.()
+          cancelTimer = null
+          backoff.handle(error)
+          return
+        }
         orca.log(`unifier: automatic cleanup failed: ${String(error)}`)
       })
       .finally(() => {
@@ -313,12 +334,12 @@ export function createCleanupService(
   }
 
   async function configureTimer() {
-    if (disposed) return
+    if (disposed || backoff.pending) return
     const version = ++timerVersion
     cancelTimer?.()
     cancelTimer = null
     try {
-      const settings = await deps.settings()
+      const settings = await deps.settings().then(backoff.success)
       if (disposed || version !== timerVersion || !settings.cleanupEnabled)
         return
       cancelTimer = schedule(() => {
@@ -328,7 +349,7 @@ export function createCleanupService(
         })
       }, settings.cleanupIntervalMinutes * 60_000)
     } catch (error) {
-      if (retire(error)) return
+      if (backoff.handle(error)) return
       orca.log(
         `unifier: cleanup timer could not be configured: ${String(error)}`,
       )
@@ -337,7 +358,8 @@ export function createCleanupService(
 
   async function cleanupCommand(mode: 'dry' | 'live') {
     try {
-      if (mode === 'live') await orca.storage.set(ARMED, true)
+      if (mode === 'live')
+        await orca.storage.set(ARMED, true).then(backoff.success)
       const result = await run(mode)
       return (
         [
@@ -355,7 +377,7 @@ export function createCleanupService(
 
   async function hideExternal() {
     try {
-      const settings = await deps.settings()
+      const settings = await deps.settings().then(backoff.success)
       const worktrees = await deps.cli.listWorktrees()
       const hidden: string[] = []
       for (const w of worktrees) {
@@ -406,6 +428,7 @@ export function createCleanupService(
     run,
     dispose() {
       disposed = true
+      backoff.dispose()
       ++timerVersion
       cancelTimer?.()
       cancelTimer = null

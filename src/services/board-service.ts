@@ -18,7 +18,7 @@ import {
   outsideWorkerDefaults,
   type WorkerDefaults,
 } from '../core/worker-defaults'
-import { createRetirement } from './retirement'
+import { createConsentBackoff } from './retirement'
 import type { TrackedWorker } from './tracker'
 import '../protocol'
 
@@ -71,28 +71,32 @@ export function createBoardService(
 ): BoardService {
   let cancelPending: (() => void) | null = null
   let disposed = false
-  const retire = createRetirement(
+  let migrated = false
+  const backoff = createConsentBackoff(
     (message) => orca.log(message),
+    schedule,
     () => {
-      disposed = true
-      cancelPending?.()
-      cancelPending = null
+      void migrate().then(() => postUpdate())
     },
   )
   /** Worktree id to live event entries, newest per pane. */
   const live = new Map<string, AgentEntry[]>()
 
-  void (async () => {
+  async function migrate() {
+    if (disposed || migrated || backoff.pending) return
     try {
-      const keys = await orca.storage.keys()
+      const keys = await orca.storage.keys().then(backoff.success)
       for (const k of OLD_AGENT_KEYS) {
-        if (keys.includes(k)) await orca.storage.delete(k)
+        if (disposed) return
+        if (keys.includes(k)) await orca.storage.delete(k).then(backoff.success)
       }
+      migrated = true
     } catch (error) {
-      retire(error)
+      backoff.handle(error)
       // Leftover keys are harmless.
     }
-  })()
+  }
+  void migrate()
 
   function liveFor(id: string, now: number): AgentEntry[] {
     const fresh = (live.get(id) ?? []).filter(
@@ -108,7 +112,7 @@ export function createBoardService(
     try {
       return await launches()
     } catch (error) {
-      if (retire(error)) throw error
+      if (backoff.handle(error)) throw error
       return []
     }
   }
@@ -121,7 +125,7 @@ export function createBoardService(
     try {
       return await orchestrator(project, summaries)
     } catch (error) {
-      if (retire(error)) throw error
+      if (backoff.handle(error)) throw error
       return null
     }
   }
@@ -136,7 +140,7 @@ export function createBoardService(
     try {
       workers = (await workerData?.workers()) ?? []
     } catch (error) {
-      if (retire(error)) throw error
+      if (backoff.handle(error)) throw error
       /* The board still loads. */
     }
     const tracked = new Map(workers.map((w) => [w.terminalId, w]))
@@ -155,7 +159,7 @@ export function createBoardService(
         if (workerData)
           defaults.set(project, await workerData.defaults(project))
       } catch (error) {
-        if (retire(error)) throw error
+        if (backoff.handle(error)) throw error
         /* An unavailable choice cannot establish a difference. */
       }
     }
@@ -174,7 +178,7 @@ export function createBoardService(
             const info = await cli.terminalInfo(worker.terminalId)
             return { paneKey: info?.paneKey, terminalId: worker.terminalId }
           } catch (error) {
-            if (retire(error)) throw error
+            if (backoff.handle(error)) throw error
             return { paneKey: null, terminalId: worker.terminalId }
           }
         }),
@@ -206,30 +210,35 @@ export function createBoardService(
   }
 
   function notify(): void {
-    if (disposed) return
+    if (disposed || backoff.pending) return
     if (cancelPending) cancelPending()
     cancelPending = schedule(() => {
       cancelPending = null
-      if (disposed) return
-      try {
-        orca.panels.post('board.changed', { at: Date.now() })
-      } catch (error) {
-        if (!retire(error))
-          orca.log(`unifier: board update failed: ${String(error)}`)
-      }
+      postUpdate()
     }, DEBOUNCE_MS)
+  }
+
+  function postUpdate() {
+    if (disposed || backoff.pending) return
+    try {
+      orca.panels.post('board.changed', { at: Date.now() })
+      backoff.success(undefined)
+    } catch (error) {
+      if (!backoff.handle(error))
+        orca.log(`unifier: board update failed: ${String(error)}`)
+    }
   }
 
   const subs = [
     orca.panels.handle('board.setMainCheckouts', async ({ filter, hidden }) => {
       try {
-        const s = await settings()
+        const s = await settings().then(backoff.success)
         const key = `board.main-checkouts.v1:${boardFilePath(hubFolder(filter, s.projectsRoot))}`
-        await orca.storage.set(key, hidden)
+        await orca.storage.set(key, hidden).then(backoff.success)
         notify()
         return { ok: true as const }
       } catch (error) {
-        retire(error)
+        backoff.handle(error)
         return {
           error: 'The main checkout visibility could not be saved. Try again.',
         }
@@ -240,11 +249,11 @@ export function createBoardService(
         const [{ summaries: worktrees, truncated }, s, known] =
           await Promise.all([
             cli.worktreeSummaries(),
-            settings(),
+            settings().then(backoff.success),
             knownLaunches(),
           ])
         const key = `board.main-checkouts.v1:${boardFilePath(hubFolder(filter, s.projectsRoot))}`
-        const hidden = await orca.storage.get(key)
+        const hidden = await orca.storage.get(key).then(backoff.success)
         const model = buildBoard(
           worktrees,
           await withLive(worktrees, known),
@@ -268,7 +277,7 @@ export function createBoardService(
           },
         }
       } catch (error) {
-        retire(error)
+        backoff.handle(error)
         return {
           error:
             'The board could not be loaded. Check that the app is still running, then try again.',
@@ -280,7 +289,7 @@ export function createBoardService(
       try {
         await cli.setStatus(worktreeId, status)
       } catch (error) {
-        retire(error)
+        backoff.handle(error)
         return { error: 'The status could not be changed. Try again.' }
       }
       notify()
@@ -293,14 +302,16 @@ export function createBoardService(
           (w) => w.id === worktreeId,
         )
         if (!found) return { error: 'That Worktree no longer exists.' }
-        await orca.host.call('workspace.open', {
-          workspaceId: found.identityKey
-            ? `identity:${found.identityKey}`
-            : found.id,
-        })
+        await orca.host
+          .call('workspace.open', {
+            workspaceId: found.identityKey
+              ? `identity:${found.identityKey}`
+              : found.id,
+          })
+          .then(backoff.success)
         return { ok: true as const }
       } catch (error) {
-        retire(error)
+        backoff.handle(error)
         return { error: 'The Worktree could not be opened. Try again.' }
       }
     }),
@@ -324,6 +335,7 @@ export function createBoardService(
     agentStates,
     dispose() {
       disposed = true
+      backoff.dispose()
       if (cancelPending) cancelPending()
       cancelPending = null
       for (const s of subs) s.dispose()
