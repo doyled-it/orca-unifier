@@ -138,6 +138,13 @@
         "title": "Unifier: Hide outside worktrees"
       }
     ],
+    "keybindings": [
+      {
+        "command": "unifier.openHub",
+        "key": "Mod+Shift+B",
+        "when": "global"
+      }
+    ],
     "events": [
       {
         "on": "agent.status.changed"
