@@ -1,7 +1,8 @@
 import type { JsonValue, OrcaWorkerApi } from 'orca/worker'
 import type { OrcaCli } from '../adapters/orca-cli'
 import { withoutModelAdvice } from '../core/launch-notice'
-import { createRetirement } from './retirement'
+import type { Schedule } from './board-service'
+import { createConsentBackoff, isConsentError } from './retirement'
 import type { Tracker } from './tracker'
 
 /** `{ terminalId, outbox }`: the plugin's own sender terminal and unsent messages. */
@@ -75,26 +76,21 @@ export function createMessenger(
     cli: OrcaCli
     globalHubWorkspaceId: () => Promise<string>
     now?: () => number
+    schedule?: Schedule
   },
 ) {
   const { tracker, cli } = deps
   const now = deps.now ?? Date.now
   let disposed = false
-  let retirementError: unknown
-  const retire = createRetirement(
+  const backoff = createConsentBackoff(
     (message) => orca.log(message),
-    () => {
-      disposed = true
-    },
+    deps.schedule,
+    () => void flush(),
   )
-  function retired(error: unknown) {
-    if (!retire(error)) return false
-    retirementError = error
-    return true
-  }
   /** Storage mutations never wait on terminal or CLI delivery. */
   let chain: Promise<unknown> = Promise.resolve()
   let deliveries: Promise<unknown> = Promise.resolve()
+  const settlements = new Map<string, (p: Pending) => Pending | null>()
 
   function serial<T>(fn: () => Promise<T>): Promise<T> {
     const next = chain.then(fn)
@@ -103,11 +99,11 @@ export function createMessenger(
   }
 
   async function read(): Promise<State> {
-    return toState(await orca.storage.get(KEY))
+    return toState(await orca.storage.get(KEY).then(backoff.success))
   }
 
   async function write(s: State): Promise<void> {
-    await orca.storage.set(KEY, s as unknown as JsonValue)
+    await orca.storage.set(KEY, s as unknown as JsonValue).then(backoff.success)
   }
 
   /** Applies `fn` to the stored entry `id` (null removes it). */
@@ -126,25 +122,36 @@ export function createMessenger(
     })
   }
 
+  /** Keep a known delivery outcome until consent permits its storage write. */
+  async function settleEntry(id: string, fn: (p: Pending) => Pending | null) {
+    settlements.set(id, fn)
+    await updateEntry(id, fn)
+    settlements.delete(id)
+  }
+
   /** The plugin's sender terminal in the global hub, created when missing or gone. */
   async function senderTerminal(): Promise<string> {
     const s = await read()
     if (s.terminalId) {
       try {
-        await orca.host.call('terminal.read', {
-          terminalId: s.terminalId,
-          maxLines: 1,
-        })
+        await orca.host
+          .call('terminal.read', {
+            terminalId: s.terminalId,
+            maxLines: 1,
+          })
+          .then(backoff.success)
         return s.terminalId
       } catch (error) {
-        if (retired(error)) throw error
+        if (isConsentError(error)) throw error
         // Gone: create a new one below.
       }
     }
-    const { terminalId } = await orca.host.call('terminal.create', {
-      workspaceId: await deps.globalHubWorkspaceId(),
-      title: TERMINAL_TITLE,
-    })
+    const { terminalId } = await orca.host
+      .call('terminal.create', {
+        workspaceId: await deps.globalHubWorkspaceId(),
+        title: TERMINAL_TITLE,
+      })
+      .then(backoff.success)
     await serial(async () => write({ ...(await read()), terminalId }))
     return terminalId
   }
@@ -177,9 +184,16 @@ export function createMessenger(
     await updateEntry(m.id, (p) => ({ ...p, attempts, inFlightAt: now() }))
     try {
       await deliver(m)
-      await updateEntry(m.id, () => null)
     } catch (e) {
-      if (retired(e)) return
+      if (isConsentError(e)) {
+        // Consent rejected delivery before sending. Keep the message retryable.
+        await settleEntry(m.id, (p) => ({
+          ...p,
+          attempts: m.attempts,
+          inFlightAt: null,
+        }))
+        throw e
+      }
       orca.log(`unifier: message to ${m.to} failed: ${String(e)}`)
       if (attempts >= MAX_ATTEMPTS) {
         orca.log(
@@ -189,15 +203,21 @@ export function createMessenger(
       } else {
         await updateEntry(m.id, (p) => ({ ...p, inFlightAt: null }))
       }
+      return
     }
+    await settleEntry(m.id, () => null)
   }
 
   /** Sends every queued message that is not being sent right now. */
   function flush(): Promise<void> {
-    if (disposed) return Promise.resolve()
+    if (disposed || backoff.pending) return Promise.resolve()
     const next = deliveries
       .then(async () => {
-        if (disposed) return
+        if (disposed || backoff.pending) return
+        for (const [id, update] of settlements) {
+          if (disposed) return
+          await settleEntry(id, update)
+        }
         for (const m of (await read()).outbox) {
           if (disposed) return
           const body = withoutModelAdvice(m.subject, m.body)
@@ -222,7 +242,7 @@ export function createMessenger(
         }
       })
       .catch((e) => {
-        if (retired(e)) return
+        if (backoff.handle(e)) return
         orca.log(`unifier: message flush failed: ${String(e)}`)
       })
     deliveries = next
@@ -236,7 +256,7 @@ export function createMessenger(
     body: string,
   ): Promise<void> {
     return serial(async () => {
-      if (disposed) throw retirementError ?? new Error('Messenger is disposed')
+      if (disposed) throw new Error('Messenger is disposed')
       const s = await read()
       const duplicate = s.outbox.some(
         (p) =>
@@ -256,7 +276,7 @@ export function createMessenger(
       }
       await write({ ...s, outbox: [...s.outbox, m] })
     }).catch((error) => {
-      retired(error)
+      backoff.handle(error)
       throw error
     })
   }
@@ -277,6 +297,7 @@ export function createMessenger(
     flush,
     dispose() {
       disposed = true
+      backoff.dispose()
     },
   }
 }

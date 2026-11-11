@@ -13,9 +13,10 @@ import {
   type WorkerDefaults,
   type WorkerKind,
 } from '../core/worker-defaults'
+import type { Schedule } from './board-service'
 import { excludeFromGit } from './hub-service'
 import { modelOptions } from './model-options'
-import { createRetirement } from './retirement'
+import { createConsentBackoff } from './retirement'
 import type { Tracker } from './tracker'
 import '../protocol'
 
@@ -73,6 +74,7 @@ export function createWorkerDefaultsService(
     exec: Exec
     tracker?: Tracker
     home: string
+    schedule?: Schedule
   },
 ): WorkerDefaultsService {
   const { fs } = deps
@@ -82,13 +84,14 @@ export function createWorkerDefaultsService(
     project: string | null,
     settings?: UnifierSettings,
   ): Promise<WorkerDefaults> {
-    const s = settings ?? (await deps.settings())
+    const s =
+      settings ?? (await deps.settings().then<UnifierSettings>(backoff.success))
     const defaults = globalWorkerDefaults(s)
     if (project === null) return defaults
     const error = projectError(project, s.excludedProjects)
     if (error) throw new Error(error)
     const overrides = readOverrides(
-      await orca.storage.get(KEY),
+      await orca.storage.get(KEY).then(backoff.success),
       s.excludedProjects,
     )
     return {
@@ -134,52 +137,58 @@ export function createWorkerDefaultsService(
     settings?: UnifierSettings,
   ): Promise<void> {
     return serial(async () => {
-      const s = settings ?? (await deps.settings())
+      const s =
+        settings ??
+        (await deps.settings().then<UnifierSettings>(backoff.success))
       await writeDefaults(project, s, await effective(project, s))
     })
   }
 
   let disposed = false
-  const retire = createRetirement(
+  const backoff = createConsentBackoff(
     (message) => orca.log(message),
-    () => {
-      disposed = true
-    },
+    deps.schedule,
+    refresh,
   )
-  const subs = [
-    orca.settings.onDidChange(() => {
-      void serial(async () => {
-        if (disposed) return
-        const s = await deps.settings()
-        const projects = new Set(
-          ((await deps.tracker?.orchestrators()) ?? []).map((o) => o.project),
+  function refresh() {
+    if (disposed || backoff.pending) return
+    void serial(async () => {
+      if (disposed || backoff.pending) return
+      const s = await deps.settings().then(backoff.success)
+      const projects = new Set(
+        ((await deps.tracker?.orchestrators()) ?? []).map((o) => o.project),
+      )
+      for (const project of await fs.list(s.projectsRoot)) {
+        if (
+          !projectError(project, s.excludedProjects) &&
+          (await fs.exists(
+            `${s.projectsRoot}/${project}/${BOARD_DIR}/worker-defaults.json`,
+          ))
         )
-        for (const project of await fs.list(s.projectsRoot)) {
-          if (
-            !projectError(project, s.excludedProjects) &&
-            (await fs.exists(
-              `${s.projectsRoot}/${project}/${BOARD_DIR}/worker-defaults.json`,
-            ))
-          )
-            projects.add(project)
-        }
-        for (const project of projects) {
-          if (disposed || projectError(project, s.excludedProjects)) continue
-          try {
-            await writeDefaults(project, s, await effective(project, s))
-          } catch (e) {
-            if (retire(e)) return
-            orca.log(`unifier: Worker defaults refresh failed: ${String(e)}`)
-          }
-        }
-        if (!disposed) orca.panels.post('board.changed', { at: Date.now() })
-      }).catch((e) => {
-        if (!retire(e))
+          projects.add(project)
+      }
+      for (const project of projects) {
+        if (disposed || projectError(project, s.excludedProjects)) continue
+        try {
+          await writeDefaults(project, s, await effective(project, s))
+        } catch (e) {
+          if (backoff.handle(e)) return
           orca.log(`unifier: Worker defaults refresh failed: ${String(e)}`)
-      })
-    }),
+        }
+      }
+      if (!disposed) {
+        orca.panels.post('board.changed', { at: Date.now() })
+        backoff.success(undefined)
+      }
+    }).catch((e) => {
+      if (!backoff.handle(e))
+        orca.log(`unifier: Worker defaults refresh failed: ${String(e)}`)
+    })
+  }
+  const subs = [
+    orca.settings.onDidChange(refresh),
     orca.panels.handle('workerDefaults.get', async ({ project }) => {
-      const s = await deps.settings()
+      const s = await deps.settings().then(backoff.success)
       const defaults = await effective(project, s)
       const { agents } = await modelOptions(orca, deps, project, s, defaults)
       return { defaults, options: agents }
@@ -188,7 +197,7 @@ export function createWorkerDefaultsService(
       serial(async () => {
         const { project, kind, agent, model } = input
         try {
-          const s = await deps.settings()
+          const s = await deps.settings().then(backoff.success)
           const error = projectError(project, s.excludedProjects)
           if (error) return { error }
           if (!isWorkerKind(kind) || !isModelChoice({ agent, model }))
@@ -214,14 +223,16 @@ export function createWorkerDefaultsService(
           const choice = { agent, model }
           await writeDefaults(project, s, { ...current, [kind]: choice })
           const overrides = readOverrides(
-            await orca.storage.get(KEY),
+            await orca.storage.get(KEY).then(backoff.success),
             s.excludedProjects,
           )
           const key = project.toLowerCase()
           const values = Object.hasOwn(overrides, key) ? overrides[key] : {}
           const updated = { ...overrides, [key]: { ...values, [kind]: choice } }
           try {
-            await orca.storage.set(KEY, updated as unknown as JsonValue)
+            await orca.storage
+              .set(KEY, updated as unknown as JsonValue)
+              .then(backoff.success)
           } catch (e) {
             // A failed save must leave the Orchestrator and board in agreement.
             await writeDefaults(project, s, current)
@@ -244,6 +255,7 @@ export function createWorkerDefaultsService(
     write,
     dispose() {
       disposed = true
+      backoff.dispose()
       for (const sub of subs) sub.dispose()
     },
   }

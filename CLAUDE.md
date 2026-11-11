@@ -118,6 +118,7 @@ Verified by the Task 2 spike on Orca 1.4.255 (fixtures in `test/fixtures/`).
 
 ## Worker wiring
 
+- Treat consent errors during activation or reload as transient. `src/services/retirement.ts` provides `createConsentBackoff`: retry after 1, 2, 5, 15, then every 60 seconds; log once per step through the instance logger. Reset with `success` after each successful host, storage or settings call. Keep normal timers and events from bypassing a pending retry, and dispose the backoff with its service. Approver, setup, cleanup, messenger, board and Worker defaults refresh all use it.
 - `src/worker.ts` exports `activateWith(orca, { cli?, exec?, schedule? })`; tests inject a fake `OrcaCli` and a manual debounce scheduler. `src/protocol.ts` declares the panel requests (`board.get`, `board.setStatus`, `board.openWorktree`) and the `board.changed` event.
 - The board reads `OrcaCli.worktreeSummaries()` (`orca worktree ps --json`, the native board's source): each worktree with `agents: AgentEntry[]` (`paneKey`, `parentPaneKey`, `terminalId`, `title`, `detail`, `state`, `since`, `updatedAt`, `agent`, `model`). Keep `listWorktrees()` for other callers.
 - `agent.status.changed` only triggers a refresh and feeds an in-memory overlay (2 min): an event newer than the summary's `updatedAt` for that pane wins. Nothing is stored; old `agents.v1`/`agents.v2` keys are deleted on activation. `BoardService.agentStates()` returns fresh summary agents with the overlay applied.

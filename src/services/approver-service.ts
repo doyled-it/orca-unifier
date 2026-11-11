@@ -16,7 +16,7 @@ import { isExcludedProject, projectOfWorktree } from '../core/projects'
 import type { UnifierSettings } from '../core/types'
 import type { BoardService, Schedule } from './board-service'
 import type { Messenger } from './messenger'
-import { createRetirement, isConsentError } from './retirement'
+import { createConsentBackoff, isConsentError } from './retirement'
 import type { TrackedWorker, Tracker } from './tracker'
 
 const SEEN = 'approver.seen.v1'
@@ -155,14 +155,10 @@ export function createApproverService(
   let inFlight: Promise<void> | null = null
   let requested = false
   let pollAgain = false
-  const retire = createRetirement(
+  const backoff = createConsentBackoff(
     (message) => orca.log(message),
-    () => {
-      disposed = true
-      requested = false
-      pollAgain = false
-      cancel()
-    },
+    schedule,
+    () => void tick(),
   )
 
   function cancel() {
@@ -194,10 +190,12 @@ export function createApproverService(
   }
 
   async function readScreen(terminalId: string) {
-    const { lines } = await orca.host.call('terminal.read', {
-      terminalId,
-      maxLines: 2000,
-    })
+    const { lines } = await orca.host
+      .call('terminal.read', {
+        terminalId,
+        maxLines: 2000,
+      })
+      .then(backoff.success)
     // Normalize menu decoration before parsing as well as fingerprinting.
     return stripVTControlCharacters(lines.join('\n'))
       .split('\n')
@@ -206,7 +204,7 @@ export function createApproverService(
   }
 
   async function readClaims(): Promise<Record<string, number>> {
-    const raw = await orca.storage.get(CLAIMS)
+    const raw = await orca.storage.get(CLAIMS).then(backoff.success)
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
     return Object.fromEntries(
       Object.entries(raw).filter(
@@ -217,7 +215,7 @@ export function createApproverService(
   }
 
   async function migrateClaims() {
-    const raw = await orca.storage.get(SEEN)
+    const raw = await orca.storage.get(SEEN).then(backoff.success)
     if (!Array.isArray(raw) || !raw.some(isClaim)) return
     const claims = await readClaims()
     for (const claim of raw.filter(isClaim)) {
@@ -227,22 +225,24 @@ export function createApproverService(
       )
     }
     // Save claims first so interruption cannot lose an uncertain delivery.
-    await orca.storage.set(CLAIMS, claims)
-    await orca.storage.set(
-      SEEN,
-      raw.filter((s) => typeof s === 'string'),
-    )
+    await orca.storage.set(CLAIMS, claims).then(backoff.success)
+    await orca.storage
+      .set(
+        SEEN,
+        raw.filter((s) => typeof s === 'string'),
+      )
+      .then(backoff.success)
   }
 
   async function releaseClaim(key: string) {
     const claims = await readClaims()
     delete claims[key]
-    await orca.storage.set(CLAIMS, claims)
+    await orca.storage.set(CLAIMS, claims).then(backoff.success)
   }
 
   async function clearActive(terminalIds: readonly string[]) {
     if (terminalIds.length === 0) return
-    const raw = await orca.storage.get(ACTIVE)
+    const raw = await orca.storage.get(ACTIVE).then(backoff.success)
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
     const active = { ...raw }
     let changed = false
@@ -251,14 +251,14 @@ export function createApproverService(
       delete active[terminalId]
       changed = true
     }
-    if (changed) await orca.storage.set(ACTIVE, active)
+    if (changed) await orca.storage.set(ACTIVE, active).then(backoff.success)
   }
 
   async function handle(worker: TrackedWorker) {
     const screen = await readScreen(worker.terminalId)
     const prompt = parseApprovalPrompt(screen)
     if (disposed) return
-    const rawActive = await orca.storage.get(ACTIVE)
+    const rawActive = await orca.storage.get(ACTIVE).then(backoff.success)
     const active =
       rawActive && typeof rawActive === 'object' && !Array.isArray(rawActive)
         ? rawActive
@@ -266,7 +266,7 @@ export function createApproverService(
     if (!prompt) {
       if (Object.hasOwn(active, worker.terminalId)) {
         delete active[worker.terminalId]
-        await orca.storage.set(ACTIVE, active)
+        await orca.storage.set(ACTIVE, active).then(backoff.success)
       }
       return
     }
@@ -274,7 +274,7 @@ export function createApproverService(
       prompt.kind === 'edit' ? (prompt.path ?? prompt.command) : prompt.command
     const hash = promptFingerprint(screen, prompt)
     const key = JSON.stringify([worker.terminalId, command, hash])
-    const raw = await orca.storage.get(SEEN)
+    const raw = await orca.storage.get(SEEN).then(backoff.success)
     const seen = Array.isArray(raw)
       ? raw.filter((s): s is string => typeof s === 'string')
       : []
@@ -288,11 +288,13 @@ export function createApproverService(
       seen.includes(key)
     )
       return
-    await orca.storage.set(ACTIVE, {
-      ...active,
-      [worker.terminalId]: { key, handled: false },
-    })
-    const rawApproved = await orca.storage.get(APPROVED)
+    await orca.storage
+      .set(ACTIVE, {
+        ...active,
+        [worker.terminalId]: { key, handled: false },
+      })
+      .then(backoff.success)
+    const rawApproved = await orca.storage.get(APPROVED).then(backoff.success)
     const approved = Array.isArray(rawApproved)
       ? rawApproved.filter((s): s is string => typeof s === 'string')
       : []
@@ -318,7 +320,8 @@ export function createApproverService(
           : judge(prompt, {
               worktreePath: path ?? '',
               cwd: null,
-              protectedNames: (await deps.settings()).protectedPaths,
+              protectedNames: (await deps.settings().then(backoff.success))
+                .protectedPaths,
               packageScripts: path
                 ? await packageScripts(deps.fs, path)
                 : undefined,
@@ -333,23 +336,35 @@ export function createApproverService(
       // An unresolved link invalidates the path context. Let policy explain it.
       decision = judge(prompt, { worktreePath: '', cwd: null })
     }
-    if (disposed || !(await deps.settings()).approverEnabled) return
+    if (
+      disposed ||
+      !(await deps.settings().then(backoff.success)).approverEnabled
+    )
+      return
     const entry = {
       at: now(),
       terminalId: worker.terminalId,
       command,
       verdict: decision.verdict,
     }
-    const log = await orca.storage.get(LOG)
-    await orca.storage.set(
-      LOG,
-      [...(Array.isArray(log) ? log : []), entry].slice(-LIMIT) as JsonValue,
-    )
+    const log = await orca.storage.get(LOG).then(backoff.success)
+    await orca.storage
+      .set(
+        LOG,
+        [...(Array.isArray(log) ? log : []), entry].slice(-LIMIT) as JsonValue,
+      )
+      .then(backoff.success)
     orca.log(JSON.stringify(entry))
-    if (disposed || !(await deps.settings()).approverEnabled) return
+    if (
+      disposed ||
+      !(await deps.settings().then(backoff.success)).approverEnabled
+    )
+      return
     if (decision.verdict === 'approve') {
       // Persist before reading so a restart or uncertain send cannot approve twice.
-      await orca.storage.set(CLAIMS, { ...claims, [key]: now() })
+      await orca.storage
+        .set(CLAIMS, { ...claims, [key]: now() })
+        .then(backoff.success)
       if (disposed) return
       let currentScreen: string
       try {
@@ -370,7 +385,7 @@ export function createApproverService(
       }
       // Nothing may await between the matching fingerprint and key delivery.
       await deps.cli.sendTerminalText(worker.terminalId, 'y', false)
-      await orca.storage.set(APPROVED, [...approved, key])
+      await orca.storage.set(APPROVED, [...approved, key]).then(backoff.success)
     } else {
       await deps.messenger.toOrchestrator(
         worker.orchestratorTerminalId,
@@ -379,20 +394,21 @@ export function createApproverService(
       )
     }
     // Persist handled history before releasing any claim.
-    await orca.storage.set(
-      SEEN,
-      seen.includes(key) ? seen : [...seen, key].slice(-LIMIT),
-    )
-    await orca.storage.set(ACTIVE, {
-      ...active,
-      [worker.terminalId]: { key, handled: true },
-    })
+    await orca.storage
+      .set(SEEN, seen.includes(key) ? seen : [...seen, key].slice(-LIMIT))
+      .then(backoff.success)
+    await orca.storage
+      .set(ACTIVE, {
+        ...active,
+        [worker.terminalId]: { key, handled: true },
+      })
+      .then(backoff.success)
     await releaseClaim(key)
   }
 
   async function poll() {
     cancel()
-    const settings = await deps.settings()
+    const settings = await deps.settings().then(backoff.success)
     // Retry if startup migration fails before worker discovery can begin.
     pollAgain = true
     await migrateClaims()
@@ -482,7 +498,7 @@ export function createApproverService(
         pollAgain = true
         await handle(worker)
       } catch (error) {
-        if (retire(error)) return
+        if (backoff.handle(error)) return
         pollAgain = true
         orca.log(
           `unifier: approval check for ${worker.terminalId} failed: ${String(error)}`,
@@ -492,7 +508,7 @@ export function createApproverService(
   }
 
   function tick(): Promise<void> {
-    if (disposed) return Promise.resolve()
+    if (disposed || backoff.pending) return Promise.resolve()
     if (inFlight) return inFlight
     inFlight = (async () => {
       do {
@@ -500,13 +516,13 @@ export function createApproverService(
         try {
           await poll()
         } catch (error) {
-          if (retire(error)) return
+          if (backoff.handle(error)) return
           orca.log(`unifier: approval polling failed: ${String(error)}`)
         }
-      } while (requested && !disposed)
+      } while (requested && !disposed && !backoff.pending)
     })().finally(() => {
       inFlight = null
-      if (pollAgain && !disposed)
+      if (pollAgain && !disposed && !backoff.pending)
         cancelPending = schedule(() => {
           cancelPending = null
           void tick()
@@ -543,6 +559,7 @@ export function createApproverService(
     tick,
     dispose() {
       disposed = true
+      backoff.dispose()
       cancel()
       events.clear()
       resumed.clear()
