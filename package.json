@@ -6,7 +6,8 @@
   "scripts": {
     "test": "orca plugin test . --json",
     "typecheck": "tsc -p . && tsc -p editor",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "orca:sync": "sh scripts/orca-sync.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",

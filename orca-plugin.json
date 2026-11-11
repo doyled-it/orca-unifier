@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "unifier",
   "name": "Unifier",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Project-level board and orchestration across repos and worktrees.",
   "engines": {
     "orca": ">=1.4.248"

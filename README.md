@@ -13,17 +13,20 @@
 
 ## Install and approve
 
-Use Orca 1.4.248 or newer. From this plugin's folder:
+Use Orca 1.4.248 or newer. Orca hashes every file in a plugin folder and refuses symlinks, so do not load the working repo itself (its `.git`, tool caches and `node_modules` change or contain symlinks). Export the committed files to a clean folder and load that:
 
 ```sh
-orca plugin dev load .
+bun run orca:sync
+orca plugin dev load ~/.local/share/orca-dev/unifier
 ```
 
-Repeat the command with the fingerprint it prints:
+Repeat the load with the fingerprint it prints:
 
 ```sh
-orca plugin dev load . --approve <fingerprint>
+orca plugin dev load ~/.local/share/orca-dev/unifier --approve <fingerprint>
 ```
+
+After changing the plugin, commit, run `bun run orca:sync` again, then `orca plugin dev reload`. Set `UNIFIER_DEV_DIR` to export somewhere else.
 
 Unifier runs as a trusted worker. It uses local files and the Orca and Git CLIs for hubs, setup and cleanup. It asks for nine capabilities:
 
