@@ -4,6 +4,7 @@ Orca plugin (TypeScript, no build step, `src/worker.ts` is the entry). It shows 
 
 ## Commands
 
+- Load into Orca: commit, `bun run orca:sync` (exports HEAD to `~/.local/share/orca-dev/unifier`), then `orca plugin dev load`/`reload` on that folder. Never dev-load the repo itself: Orca hashes every file (including `.git` and `.codegraph`, which change underneath it) and refuses symlinks (`node_modules/.bin`), which leaves the plugin errored with a pinned hash that never matches.
 - Test: `orca plugin test . --json`
 - Typecheck: `bun run typecheck` (`tsc -p .` and `tsc -p editor`; run `orca plugin types . --json` first to create `.orca/types/`)
 - Lint: `bunx biome check .`
