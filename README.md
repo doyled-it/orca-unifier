@@ -41,7 +41,7 @@ Unifier runs as a trusted worker. It uses local files and the Orca and Git CLIs 
 
 Before opening a hub, set `excludedProjects` to a comma-separated list of Project folder names Unifier must never touch. It defaults to empty. Set `protectedPaths` for any extra sensitive path names the approver must protect.
 
-1. Open Orca's command palette and choose **Unifier: Open hub**. This opens the global board in the Projects folder.
+1. Open Orca's command palette and choose **Unifier: Open hub**, or press `Cmd+Shift+B` on macOS (`Ctrl+Shift+B` elsewhere). This opens the global board in the Projects folder.
 2. Arrange the board on the left and chats on the right once. Orca remembers the layout.
 3. Choose **Open hub** for a Project on the global board to open its Project hub.
 4. Set the Project's Worker defaults for implementation, review, design and planning, and prose. Choose an agent and model for each kind, then **Save** each row. Unifier writes the effective choices to the Project's `.unifier/worker-defaults.json` for the Orchestrator to read.
