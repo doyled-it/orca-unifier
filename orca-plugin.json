@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "unifier",
   "name": "Unifier",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Project-level board and orchestration across repos and worktrees.",
   "engines": {
     "orca": ">=1.4.248"
@@ -141,7 +141,7 @@
     "keybindings": [
       {
         "command": "unifier.openHub",
-        "key": "Mod+Shift+B",
+        "key": "Mod+Shift+U",
         "when": "global"
       }
     ],
