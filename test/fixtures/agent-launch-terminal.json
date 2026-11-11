@@ -1,0 +1,25 @@
+{
+  "id": "00000000-0000-4000-8000-000000000020",
+  "ok": true,
+  "result": {
+    "outcome": {
+      "kind": "terminal",
+      "handle": "term_00000000-0000-4000-8000-000000000109",
+      "paneKey": "00000000-0000-4000-8000-000000000021:00000000-0000-4000-8000-000000000002"
+    },
+    "worktreeId": "00000000-0000-4000-8000-000000000019::/Users/example/projects/unifier-sandbox",
+    "receipt": {
+      "mode": "terminal",
+      "preferred": "terminal",
+      "reason": "requested",
+      "detail": "Started a terminal agent, as requested."
+    },
+    "placement": {
+      "groupId": "00000000-0000-4000-8000-000000000010"
+    },
+    "operationId": "1000000000000-00000000000000000000000000000001"
+  },
+  "_meta": {
+    "runtimeId": "00000000-0000-4000-8000-000000000018"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "case": "worker-start-claude-workspace-created",
+  "trigger": "workspace.create.after for the claude worker worktree",
+  "hook": "workspace.create.after",
+  "event": {
+    "workspaceId": "00000000-0000-4000-8000-000000000015::/Users/example/orca/workspaces/demo/spike-claude",
+    "kind": "worktree",
+    "path": "/Users/example/orca/workspaces/demo/spike-claude",
+    "branch": "spike-claude"
+  }
+}

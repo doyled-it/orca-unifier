@@ -1,0 +1,26 @@
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  >_ OpenAI Codex (v0.163.0)
+     ~/orca/workspaces/demo/spike-codex
+› This is an approval-prompt test. For each command I give you, call your shell tool ONCE with
+  sandbox_permissions set to require_escalated (justification: spike test) on the first attempt; never run
+  it in the sandbox first. First command: uname -a
+• I’ll run uname -a once with the requested escalation setting.
+✔ You approved codex to run uname -a this time
+• Ran uname -a
+  └ Darwin REDACTED-HOST 25.6.0 Darwin Kernel Version 25.6.0: Tue Aug 18 17:49:54 PDT 2026; root:xnu-12377.16…
+    + 1 line (⌃t to expand)
+• uname -a returned:
+  Darwin REDACTED-HOST 25.6.0 Darwin Kernel Version 25.6.0: Tue Aug 18 17:49:54 PDT 2026; root:xnu-
+  12377.161.15.700.19~2/RELEASE_ARM64_T8142 arm64
+  Worked for 22s • 5:54 AM
+› Next command (same rule, require_escalated on the first attempt): printf 'hello\n' > inside.txt
+• I’ll run the command once with escalation, as requested.
+• Running printf 'hello\n' > inside.txt
+  Would you like to run the following command?
+  Environment: local
+  Reason: spike test
+  $ printf 'hello\n' > inside.txt
+› 1. Yes, proceed (y)
+  2. Yes, and don't ask again for commands that start with `printf 'hello\n' > inside.txt` (p)
+  3. No, and tell Codex what to do differently (esc)
+  Press enter to confirm or esc to cancel

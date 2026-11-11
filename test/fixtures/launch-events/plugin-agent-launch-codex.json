@@ -1,0 +1,13 @@
+{
+  "case": "plugin-agent-launch-codex",
+  "trigger": "agent.launch from a plugin worker (agent codex, prompt given but not delivered)",
+  "hook": "agent.launch.before",
+  "event": {
+    "agent": "codex",
+    "workspaceId": "00000000-0000-4000-8000-000000000015::/Users/example/projects/unifier-sandbox/demo",
+    "workspaceKind": "worktree",
+    "terminalId": "term_00000000-0000-4000-8000-000000000106",
+    "command": "codex '-c' 'disable_paste_burst=true' '--approve-for-me'",
+    "env": {}
+  }
+}

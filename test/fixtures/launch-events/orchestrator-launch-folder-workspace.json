@@ -1,0 +1,13 @@
+{
+  "case": "orchestrator-launch-folder-workspace",
+  "trigger": "orca agent launch of the coordinator (claude, --model, --prompt) in a folder workspace",
+  "hook": "agent.launch.before",
+  "event": {
+    "agent": "claude",
+    "workspaceId": "00000000-0000-4000-8000-000000000019::/Users/example/projects/unifier-sandbox",
+    "workspaceKind": "worktree",
+    "terminalId": "term_00000000-0000-4000-8000-000000000104",
+    "command": "claude '--dangerously-skip-permissions' '--model' 'claude-haiku-5-5' 'You are a test coordinator for a platform spike. Run exactly these three shell commands in order, each one once, saving output as shown. Do not run anything else, do not edit files, and do not retry a failed command. After the third command, end your turn and wait.\n\n1. orca orchestration run-create --objective \"unifier spike\" --json > /Users/example/projects/unifier-sandbox/.unifier/driver/1-run-create.json 2>&1\n\n2. orca orchestration worker-start --spec \"Read README.md in your worktree and report its first line with worker_done. Do not edit any file and do not run any other command.\" --worktree new-top-level --repo id:00000000-0000-4000-8000-000000000015 --name spike-codex --agent codex --json > /Users/example/projects/unifier-sandbox/.unifier/driver/2-worker-codex.json 2>&1\n\n3. orca orchestration worker-start --spec \"Read README.md in your worktree and report its first line with worker_done. Do not edit any file and do not run any other command.\" --worktree new-top-level --repo id:00000000-0000-4000-8000-000000000015 --name spike-claude --agent claude --model claude-haiku-5-5 --json > /Users/example/projects/unifier-sandbox/.unifier/driver/3-worker-claude.json 2>&1\n\nWhen Orca later wakes you with worker messages, just reply \"noted\" and end your turn; do not run commands unless the human in this terminal asks.'",
+    "env": {}
+  }
+}

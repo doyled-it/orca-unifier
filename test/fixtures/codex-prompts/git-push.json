@@ -1,0 +1,7 @@
+{
+  "command": "git -C . push origin spike-codex",
+  "kind": "command",
+  "approveKeys": "y",
+  "declineKeys": "\u001b",
+  "notes": "Plain git push never prompts here because ~/.codex/rules/default.rules allows the git push prefix; git -C . push bypasses that prefix rule. Declined with esc: Codex printed Conversation interrupted."
+}

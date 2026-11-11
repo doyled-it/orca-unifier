@@ -1,0 +1,7 @@
+{
+  "command": "printf 'hello\\n' > inside.txt",
+  "kind": "command",
+  "approveKeys": "y",
+  "declineKeys": "\u001b",
+  "notes": "Redirect into a file inside the worktree. Approved with y."
+}

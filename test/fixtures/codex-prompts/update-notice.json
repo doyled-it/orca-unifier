@@ -1,0 +1,7 @@
+{
+  "command": null,
+  "kind": "not-an-approval",
+  "approveKeys": null,
+  "declineKeys": "\u001b",
+  "notes": "Codex startup update modal (plugin agent.launch and plain launches; orchestration launches pass -c check_for_update_on_startup=false). Not an approval prompt: no Press enter to confirm line. Esc skips it. Never answer it as an approval."
+}

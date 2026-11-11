@@ -1,0 +1,7 @@
+{
+  "command": "uname -a",
+  "kind": "command",
+  "approveKeys": "y",
+  "declineKeys": "\u001b",
+  "notes": "Approved with y (no Enter) via orca terminal send; Codex ran it."
+}

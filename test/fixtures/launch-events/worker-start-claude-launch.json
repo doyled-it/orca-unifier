@@ -1,0 +1,13 @@
+{
+  "case": "worker-start-claude-launch",
+  "trigger": "orca orchestration worker-start --worktree new-top-level --agent claude --model claude-haiku-5-5",
+  "hook": "agent.launch.before",
+  "event": {
+    "agent": "claude",
+    "workspaceId": "00000000-0000-4000-8000-000000000015::/Users/example/orca/workspaces/demo/spike-claude",
+    "workspaceKind": "worktree",
+    "terminalId": "term_00000000-0000-4000-8000-000000000101",
+    "command": "claude '--dangerously-skip-permissions' '--model' 'claude-haiku-5-5'",
+    "env": {}
+  }
+}

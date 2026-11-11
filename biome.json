@@ -1,0 +1,18 @@
+{
+  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!.orca",
+      "!node_modules",
+      "!.superpowers",
+      "!.codegraph",
+      "!docs",
+      "!spike"
+    ]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2 },
+  "javascript": {
+    "formatter": { "quoteStyle": "single", "semicolons": "asNeeded" }
+  }
+}
