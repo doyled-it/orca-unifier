@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { assert, test } from 'orca/testing'
+import { parseSettings } from './settings'
 import {
   readModelCatalog,
   renderCharter,
@@ -31,16 +32,24 @@ const VARS = {
 const EMOJI = /\p{Extended_Pictographic}/u
 
 test('templates carry no em dash, emoji or source-project names', () => {
+  const { excludedProjects } = parseSettings(
+    { excludedProjects: 'alpha,beta' },
+    '/example',
+  )
   for (const name of FILES) {
     const text = template(name)
     assert.ok(text.trim().length > 0, `${name} is empty`)
     assert.ok(!text.includes('\u2014'), `${name} has an em dash`)
     assert.ok(!EMOJI.test(text), `${name} has an emoji`)
-    for (const banned of ['treectl', 'run slot', 'epic']) {
+    for (const banned of ['treectl', 'run slot', 'epic', '/Users/', '/home/']) {
       assert.ok(
-        !text.toLowerCase().includes(banned),
+        !text.toLowerCase().includes(banned.toLowerCase()),
         `${name} mentions ${banned}`,
       )
+    }
+    const rendered = renderCharter(text, VARS).toLowerCase()
+    for (const project of excludedProjects) {
+      assert.ok(!rendered.includes(project), `${name} mentions ${project}`)
     }
   }
 })

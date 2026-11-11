@@ -55,22 +55,22 @@ Before opening a hub, set `excludedProjects` to a comma-separated list of Projec
 
 Project Worker defaults override the four global Worker choices below. Each Worker choice is an `agent:model` string.
 
-| Key                      | Default                  | Meaning                                                                                                                            |
-| ------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `excludedProjects`       | `""`                     | Comma-separated Project folder names Unifier never touches. Case-insensitive; empty by default.                                    |
-| `protectedPaths`         | `""`                     | Comma-separated extra sensitive path names for the approver, in addition to built-in `.env*`, `.envrc` and `.secrets` protections. |
-| `projectsRoot`           | `~/projects`             | Folder whose immediate subfolders are Projects; also the global hub.                                                               |
-| `orchestratorAgent`      | `claude`                 | Default agent for a Project's first Orchestrator.                                                                                  |
-| `orchestratorModel`      | `claude-opus-5-5`        | Default model for a Project's first Orchestrator. Later starts use its last successful choice.                                     |
-| `workerImplementation`   | `codex:gpt-6.1-sol`      | Worker default for implementation.                                                                                                 |
-| `workerReview`           | `codex:gpt-6.1-sol`      | Worker default for reviews and foremen.                                                                                            |
-| `workerDesign`           | `claude:claude-opus-4-8` | Worker default for design and planning.                                                                                            |
-| `workerProse`            | `claude:claude-opus-4-8` | Worker default for prose.                                                                                                          |
-| `hideMainCheckouts`      | `true`                   | Hide each Repo's main checkout from the board.                                                                                     |
-| `cleanupEnabled`         | `true`                   | Enable automatic cleanup. Removals require the one-time arming step above.                                                         |
-| `cleanupIntervalMinutes` | `10`                     | Minutes between automatic cleanup checks; minimum 5.                                                                               |
-| `approverEnabled`        | `true`                   | Enable guarded auto-approval for tracked Codex Workers.                                                                            |
-| `setupEnabled`           | `true`                   | Run standard setup when a new Worktree is created.                                                                                 |
+| Key                      | Default                  | Meaning                                                                                                                                  |
+| ------------------------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `excludedProjects`       | `""`                     | Comma-separated plain Project folder names Unifier never touches, no wildcards. Case-insensitive; empty by default.                      |
+| `protectedPaths`         | `""`                     | Comma-separated plain sensitive path names, no wildcards, in addition to built-in `.env*`, `.envrc` and `.secrets` approver protections. |
+| `projectsRoot`           | `~/projects`             | Folder whose immediate subfolders are Projects; also the global hub.                                                                     |
+| `orchestratorAgent`      | `claude`                 | Default agent for a Project's first Orchestrator.                                                                                        |
+| `orchestratorModel`      | `claude-opus-5-5`        | Default model for a Project's first Orchestrator. Later starts use its last successful choice.                                           |
+| `workerImplementation`   | `codex:gpt-6.1-sol`      | Worker default for implementation.                                                                                                       |
+| `workerReview`           | `codex:gpt-6.1-sol`      | Worker default for reviews and foremen.                                                                                                  |
+| `workerDesign`           | `claude:claude-opus-4-8` | Worker default for design and planning.                                                                                                  |
+| `workerProse`            | `claude:claude-opus-4-8` | Worker default for prose.                                                                                                                |
+| `hideMainCheckouts`      | `true`                   | Hide each Repo's main checkout from the board.                                                                                           |
+| `cleanupEnabled`         | `true`                   | Enable automatic cleanup. Removals require the one-time arming step above.                                                               |
+| `cleanupIntervalMinutes` | `10`                     | Minutes between automatic cleanup checks; minimum 5.                                                                                     |
+| `approverEnabled`        | `true`                   | Enable guarded auto-approval for tracked Codex Workers.                                                                                  |
+| `setupEnabled`           | `true`                   | Run standard setup when a new Worktree is created.                                                                                       |
 
 ## Safety rules
 

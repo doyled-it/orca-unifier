@@ -1,4 +1,5 @@
 import type { JsonValue, OrcaWorkerApi, PluginHooks } from 'orca/worker'
+import type { OrcaCli } from '../adapters/orca-cli'
 import { WRONG_LAUNCH_SUBJECT } from '../core/launch-notice'
 import {
   checkWorkerLaunch,
@@ -6,7 +7,9 @@ import {
   parseDispatchPrompt,
   parseLaunch,
 } from '../core/launch-policy'
+import { isExcludedProject, projectOfWorktree } from '../core/projects'
 import { withWorkerBrief } from '../core/templates'
+import type { UnifierSettings } from '../core/types'
 import type { Messenger } from './messenger'
 import type { TrackedWorker, Tracker } from './tracker'
 
@@ -59,6 +62,8 @@ export function createLaunchWatch(
   deps: {
     tracker: Tracker
     messenger: Messenger
+    cli: OrcaCli
+    settings: () => Promise<UnifierSettings>
     /** The Worker brief and report format appended to tracked dispatch prompts. */
     workerBrief: () => string
     now?: () => number
@@ -88,25 +93,40 @@ export function createLaunchWatch(
     return next
   }
 
-  /** True when the prompt is a dispatch from a tracked Orchestrator. */
-  async function isTrackedDispatch(event: PromptEvent): Promise<boolean> {
+  /** Resolves a tracked dispatch against the current Project exclusions. */
+  async function trackedDispatch(event: PromptEvent) {
     const dispatch = parseDispatchPrompt(event.prompt)
-    if (!dispatch) return false
-    return (
-      (await tracker.rootOrchestrator(dispatch.coordinatorTerminal)) !== null
-    )
-  }
-
-  /** Records a tracked Worker and queues the message to send, if any. */
-  async function verifyWorker(event: PromptEvent): Promise<boolean> {
-    const dispatch = parseDispatchPrompt(event.prompt)
-    if (!dispatch) return false
+    if (!dispatch) return null
     const orchestrator = await tracker.rootOrchestrator(
       dispatch.coordinatorTerminal,
     )
-    // Untracked coordinators (alpha's, anyone's) are ignored entirely.
-    if (!orchestrator) return false
+    if (!orchestrator) return null
+    const settings = await deps.settings()
+    if (isExcludedProject(orchestrator.project, settings.excludedProjects))
+      return null
     const launch = await tracker.launchFor(event.terminalId)
+    if (launch?.workspaceId && settings.excludedProjects.length > 0) {
+      const worktrees = await deps.cli.listWorktrees()
+      const worktree = worktrees.find((w) => w.id === launch.workspaceId)
+      const mainPaths = new Map(
+        worktrees
+          .filter((w) => w.isMainWorktree)
+          .map((w) => [w.repoId, w.path]),
+      )
+      const project = worktree
+        ? projectOfWorktree(worktree, mainPaths, settings.projectsRoot)
+        : null
+      if (project && isExcludedProject(project, settings.excludedProjects))
+        return null
+    }
+    return { dispatch, orchestrator, launch }
+  }
+
+  /** Records and checks a Worker; null means the dispatch is now excluded. */
+  async function verifyWorker(event: PromptEvent): Promise<boolean | null> {
+    const tracked = await trackedDispatch(event)
+    if (!tracked) return null
+    const { dispatch, orchestrator, launch } = tracked
     const worker: TrackedWorker = {
       terminalId: event.terminalId,
       workspaceId: launch?.workspaceId ?? null,
@@ -164,9 +184,13 @@ export function createLaunchWatch(
       if (event.inputKind !== 'orchestration') return
       let tracked = false
       try {
-        tracked = await isTrackedDispatch(event)
+        tracked = (await trackedDispatch(event)) !== null
         // verifyWorker queues a message in storage; it is sent after the hook returns.
-        if (tracked && (await verifyWorker(event))) void messenger.flush()
+        if (tracked) {
+          const queued = await verifyWorker(event)
+          tracked = queued !== null
+          if (queued) void messenger.flush()
+        }
       } catch (e) {
         orca.log(`unifier: could not check a worker: ${String(e)}`)
       }

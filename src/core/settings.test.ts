@@ -134,3 +134,15 @@ test('project and protected names parse comma-separated plain folder names', () 
     assert.deepEqual(empty.protectedPaths, [])
   }
 })
+
+for (const key of ['excludedProjects', 'protectedPaths'] as const) {
+  test(`${key} drops names containing glob characters`, () => {
+    for (const glob of ['*', '?', '[', ']', '{', '}']) {
+      const settings = parseSettings(
+        { [key]: ` Alpha, bad${glob}name, Team Space, .private ` },
+        '/Users/m',
+      )
+      assert.deepEqual(settings[key], ['alpha', 'team space', '.private'])
+    }
+  })
+}

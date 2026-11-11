@@ -57,7 +57,7 @@ function names(raw: unknown): string[] {
     ? raw
         .split(',')
         .map((name) => name.trim().toLowerCase())
-        .filter(isPlainProjectName)
+        .filter((name) => isPlainProjectName(name) && !/[*?[\]{}]/.test(name))
     : []
 }
 

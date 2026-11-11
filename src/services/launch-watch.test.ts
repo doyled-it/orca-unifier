@@ -3,6 +3,7 @@ import { assert, mockHost, mountWorker, test } from 'orca/testing'
 import type { OrcaWorkerApi, PluginHooks } from 'orca/worker'
 import type { Exec } from '../adapters/exec'
 import type { OrcaCli } from '../adapters/orca-cli'
+import type { WorktreeRecord } from '../core/types'
 import * as main from '../worker'
 import { createTracker } from './tracker'
 
@@ -25,7 +26,34 @@ function fixture<T>(name: string): T {
 const COORD = 'term_00000000-0000-4000-8000-000000000104'
 const HUB = 'hub::/Users/m/projects'
 
-function fakeCli(hang = false) {
+function worktree(
+  path: string,
+  repoId = 'repo',
+  isMainWorktree = false,
+): WorktreeRecord {
+  return {
+    id: `${repoId}::${path}`,
+    identityKey: `wt2:local:${path}`,
+    projectId: 'project',
+    repoId,
+    path,
+    branch: isMainWorktree ? 'main' : 'worker',
+    displayName: 'worker',
+    isMainWorktree,
+    isPinned: false,
+    isUnread: false,
+    isArchived: false,
+    comment: '',
+    workspaceStatus: 'in-progress',
+    parentWorktreeId: null,
+    childWorktreeIds: [],
+    linkedGitLabMR: null,
+    linkedPR: null,
+    lastActivityAt: 0,
+  }
+}
+
+function fakeCli(hang = false, worktrees: WorktreeRecord[] = []) {
   const sent: {
     fromTerminalId: string
     runId: string
@@ -38,7 +66,7 @@ function fakeCli(hang = false) {
       return { summaries: [], truncated: false }
     },
     async listWorktrees() {
-      return []
+      return worktrees
     },
     async ensureFolderWorkspace() {
       return HUB
@@ -65,9 +93,10 @@ async function setup(
     now?: () => number
     hang?: boolean
     failOutboxWrites?: boolean
+    worktrees?: WorktreeRecord[]
   } = {},
 ) {
-  const fake = fakeCli(opts.hang)
+  const fake = fakeCli(opts.hang, opts.worktrees)
   const host = mockHost({
     settings: { projectsRoot: '/Users/m/projects' },
     results: {
@@ -109,7 +138,13 @@ async function setup(
       runId: 'run_1',
     })
   }
-  return { worker, host, tracker, ...fake }
+  return {
+    worker,
+    host,
+    tracker,
+    api: api as unknown as OrcaWorkerApi,
+    ...fake,
+  }
 }
 
 async function settle(rounds = 20): Promise<void> {
@@ -206,6 +241,86 @@ test('an untracked coordinator is ignored entirely', async () => {
   assert.equal(s.sent.length, 0)
   assert.equal(s.typed.length, 0)
   assert.equal(s.host.callsOf('terminal.create').length, 0)
+  await s.worker.deactivate()
+})
+
+test('a Project excluded after its Orchestrator was tracked ignores new dispatches', async () => {
+  const s = await setup()
+  await s.api.settings.set('excludedProjects', 'DeMo')
+  const w = codexWorker('term_excluded')
+  await s.worker.hooks.fire('agent.launch.before', w.launch)
+  const result = await s.worker.hooks.fire('agent.prompt.before', w.prompt)
+  assert.deepEqual(result, { kind: 'continue', event: w.prompt })
+  await settle()
+  assert.deepEqual(await s.tracker.workers(), [])
+  assert.equal(s.host.data().storage['launch-watch.v1'], undefined)
+  assert.equal(s.host.data().storage['messenger.v1'], undefined)
+  assert.equal(s.sent.length, 0)
+  assert.equal(s.typed.length, 0)
+  await s.worker.deactivate()
+})
+
+for (const path of [
+  '/Users/m/projects/other/worker',
+  '/Users/m/orca/workspaces/other/worker',
+]) {
+  test(`a Worker in an excluded actual Project is ignored at ${path}`, async () => {
+    const actual = worktree(path)
+    const s = await setup({
+      worktrees: [
+        actual,
+        worktree('/Users/m/projects/other/main', 'repo', true),
+      ],
+    })
+    await s.api.settings.set('excludedProjects', 'OTHER')
+    const w = codexWorker('term_excluded')
+    w.launch.workspaceId = actual.id
+    await s.worker.hooks.fire('agent.launch.before', w.launch)
+    assert.deepEqual(
+      await s.worker.hooks.fire('agent.prompt.before', w.prompt),
+      { kind: 'continue', event: w.prompt },
+    )
+    await settle()
+    assert.deepEqual(await s.tracker.workers(), [])
+    assert.equal(s.host.data().storage['launch-watch.v1'], undefined)
+    assert.equal(s.host.data().storage['messenger.v1'], undefined)
+    assert.equal(s.sent.length, 0)
+    assert.equal(s.typed.length, 0)
+    await s.worker.deactivate()
+  })
+}
+
+test('verification rereads exclusions before recording or briefing a Worker', async () => {
+  const actual = worktree('/Users/m/projects/other/worker')
+  const fake = fakeCli(false, [
+    actual,
+    worktree('/Users/m/projects/other/main', 'repo', true),
+  ])
+  let exclude = async () => {}
+  const s = await setup({
+    cli: {
+      ...fake.cli,
+      async listWorktrees() {
+        await exclude()
+        return fake.cli.listWorktrees()
+      },
+    },
+  })
+  await s.api.settings.set('excludedProjects', 'unrelated')
+  exclude = async () => s.api.settings.set('excludedProjects', 'other')
+  const w = codexWorker('term_excluded')
+  w.launch.workspaceId = actual.id
+  await s.worker.hooks.fire('agent.launch.before', w.launch)
+  assert.deepEqual(await s.worker.hooks.fire('agent.prompt.before', w.prompt), {
+    kind: 'continue',
+    event: w.prompt,
+  })
+  await settle()
+  assert.deepEqual(await s.tracker.workers(), [])
+  assert.equal(s.host.data().storage['launch-watch.v1'], undefined)
+  assert.equal(s.host.data().storage['messenger.v1'], undefined)
+  assert.equal(fake.sent.length, 0)
+  assert.equal(fake.typed.length, 0)
   await s.worker.deactivate()
 })
 

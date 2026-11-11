@@ -107,6 +107,8 @@ export function activateWith(
   createLaunchWatch(orca, {
     tracker,
     messenger,
+    cli,
+    settings,
     workerBrief: () => workerBriefText(loadTemplates()),
     now: deps.now,
   })
